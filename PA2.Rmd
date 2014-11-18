@@ -1,24 +1,35 @@
 ---
-title: "RepData_PeerAssessment2"
-author: "Steve Senior"
+title: "Weather Events Associated with Economic and Health Impacts: Tornados, Hurricanes and Hot Dry Weather"
+author: "Steven Senior"
 date: "13 November 2014"
 output: html_document
 ---
-Health and Economic Impacts of Weather Events
-==========================
+
 # Synopsis
+
+This document outlines a simple analysis of the US National Weather Service's Storm Data Documentation. Of the event types covered, tornados caused the greatest number of deaths in total, while unseasonably warm and dry weather had the highest number of deaths on average per event. Tornados and hurricanes caused the most economic damage, both in total and on average per event.
+
+This study was limited in scope. A more in depth analysis could be made of property and crop damage.
+
+### Note:
+I use in-text calculations throughout. This means that sometimes, I create an object that stores a summary statistic, but don't print it to the console. Instead I call it in the text. I think this is neater. I hope you agree.
 
 # Data Processing
 
 ## Installing Packages
 
-```{r Install packages}
+I use bunzip2 to unzip the data once downloaded. I also like to use dplyr to manipulate data. You're not interested in the output from this chunk, so I've hidden it with the message = FALSE option.
+
+```{r Install packages, message=FALSE}
 # install.packages(c("R.utils", "dplyr"))
 library(R.utils)
 library(dplyr)
 ```
 
 ## Loading and preprocessing the data
+
+The data is a bit large, so I've cached this code chunk.
+
 ```{r Load data, cache = TRUE}
 # Download if not already present
 if(!file.exists("repdata-data-StormData.csv")){
@@ -32,15 +43,7 @@ storm <- read.csv("repdata-data-StormData.csv", header = T, stringsAsFactors = T
 storm <- as.tbl(storm)
 ```
 
-# Results
-
-## Which event types are most harmful to population health?
-
-### Preliminary analysis
-
-There are two variables in the dataset that relate to health impacts INJURIES and FATALITIES. There is no advice on how to weight deaths versus injuries, so I will treat them separately here.
-
-Before doing the full data analysis, it is useful to do have a basic look at the distribution of the data, calculate some simple summary statistics, and check for missing data.
+First, I check the variables associated with impacts on population health. There are two variables in the dataset that relate to health impacts: INJURIES and FATALITIES. There is no advice on how to weight deaths versus injuries, so I will treat them separately here.
 
 ```{r}
 # Check for missing data
@@ -54,6 +57,52 @@ There are no missing data in the injuries or fatalities. However, it is worth no
 # Fix capitalisation
 storm$EVTYPE <- as.factor(toupper(as.character(storm$EVTYPE)))
 ```
+
+Next, I check the variables associated with economic damage. There are four variables that relaate to economic damage in the data set: two refer to property damage and two refer to crop damage. In both cases, one variable gives a value, and the second variable gives the exponent (in powers of 10) for that value. A quick glance at the data reveals that the exponent variable data is very messy:
+
+```{r}
+summary(storm$PROPDMGEXP)
+summary(storm$CROPDMGEXP)
+```
+
+The levels of these variables are all over the place. According to the documentation for the data set: *"Estimates should be rounded to three significant digits, followed by an alphabetical character signifying the magnitude of the number, i.e., 1.55B for $1,550,000,000. Alphabetical characters used to signify magnitude include “K” for thousands, “M” for millions, and “B” for billions."* On this basis, I correct character cases, then convert any value that is not "", K", "M", "B" to NA (I assume that "" means that the value of the exponent it 0). Then I create two new variables that have the actual property and crop damage values (to three signficant figures). 
+
+```{r}
+# Convert all values to upper case
+storm$PROPDMGEXP <- toupper(storm$PROPDMGEXP)
+storm$CROPDMGEXP <- toupper(storm$CROPDMGEXP)
+
+# Replace values not equal to "K", "M" or "B" with NA
+valid <- c("", "K", "M", "B")
+storm$PROPDMGEXP[!(storm$PROPDMGEXP %in% valid)]  <- NA
+storm$CROPDMGEXP[!(storm$CROPDMGEXP %in% valid)]  <- NA
+
+# Convert to character
+storm$PROPDMGEXP <- as.character(storm$PROPDMGEXP)
+storm$CROPDMGEXP <- as.character(storm$CROPDMGEXP)
+
+# Replace alphabetical character with numeric powers of 10
+for(k in 1:length(valid)){
+	storm$PROPDMGEXP[storm$PROPDMGEXP == valid[k]] <- 10^(3*(k-1))
+	storm$CROPDMGEXP[storm$CROPDMGEXP == valid[k]] <- 10^(3*(k-1))
+}
+
+# Convert to numeric
+storm$PROPDMGEXP <- as.numeric(storm$PROPDMGEXP)
+storm$CROPDMGEXP <- as.numeric(storm$CROPDMGEXP)
+
+# Create new variables with all property and crop damage
+storm$PROPDMG_full <- storm$PROPDMG * storm$CROPDMGEXP
+storm$CROPDMG_full <- storm$CROPDMG * storm$CROPDMGEXP
+```
+
+# Results
+
+## Which event types are most harmful to population health?
+
+### Preliminary analysis
+
+First, it is helpful to calculate some simple summary statistics:
 
 ```{r}
 total_death <- sum(storm$FATALITIES)
@@ -160,49 +209,14 @@ barplot(avg_injuries$mean_injuries[1:10],
 	  main = "Average Injuries by Event Type"
 	  )
 ```
+*Caption:*
+The figure above contains four plots showing (in order) the top ten event types for total deaths, average deaths per event, total injuries and average injuries per event. From this we can see that total deaths and injuries fall away more quickly than average deaths and injuries. This suggests that differences in frequency contribute to which events cause the most harm to population health in total.
 
+## Which event types have the greatest economic consequences?
 
-## Which event types have the biggest economic impacts?
-
-### Preliminary analysis
-
-There are four variables that relaate to economic damage in the data set, two refer to property damage and two refer to crop damage. In both cases, one variable gives a value, and the second variable gives the exponent (in powers of 10) for that value. A quick glance at the data reveals that the exponent variable data is very messy:
-
-```{r}
-summary(storm$PROPDMGEXP)
-summary(storm$CROPDMGEXP)
-```
-
-The levels of these variables are all over the place. According to the documentation for the data set: *"Estimates should be rounded to three significant digits, followed by an alphabetical character signifying the magnitude of the number, i.e., 1.55B for $1,550,000,000. Alphabetical characters used to signify magnitude include “K” for thousands, “M” for millions, and “B” for billions."* On this basis, I correct character cases, then convert any value that is not "", K", "M", "B" to NA (I assume that "" means that the value of the exponent it 0). Then I create two new variables that have the actual property and crop damage values (to three signficant figures). Finally, I sum these two variables to get total economic damage. Note that where an event has NA for either property or crop damage, the total will also be NA. I thought this more appropriate than, for example assuming NA meant zero, or using any other method of imputing missing values.
+To calculate the total economic impact of each event, I sum the crop damage and property damage variables to get total economic damage. Note that where an event has NA for either property or crop damage, the total will also be NA. I thought this more appropriate than, for example assuming NA meant zero, or using any other method of imputing missing values. Then I calculate the total and mean economic damage for each event type.
 
 ```{r}
-# Convert all values to upper case
-storm$PROPDMGEXP <- toupper(storm$PROPDMGEXP)
-storm$CROPDMGEXP <- toupper(storm$CROPDMGEXP)
-
-# Replace values not equal to "K", "M" or "B" with NA
-valid <- c("", "K", "M", "B")
-storm$PROPDMGEXP[!(storm$PROPDMGEXP %in% valid)]  <- NA
-storm$CROPDMGEXP[!(storm$CROPDMGEXP %in% valid)]  <- NA
-
-# Convert to character
-storm$PROPDMGEXP <- as.character(storm$PROPDMGEXP)
-storm$CROPDMGEXP <- as.character(storm$CROPDMGEXP)
-
-# Replace alphabetical character with numeric powers of 10
-for(k in 1:length(valid)){
-	storm$PROPDMGEXP[storm$PROPDMGEXP == valid[k]] <- 10^(3*(k-1))
-	storm$CROPDMGEXP[storm$CROPDMGEXP == valid[k]] <- 10^(3*(k-1))
-}
-
-# Convert to numeric
-storm$PROPDMGEXP <- as.numeric(storm$PROPDMGEXP)
-storm$CROPDMGEXP <- as.numeric(storm$CROPDMGEXP)
-
-# Create new variables with all property and crop damage
-storm$PROPDMG_full <- storm$PROPDMG * storm$CROPDMGEXP
-storm$CROPDMG_full <- storm$CROPDMG * storm$CROPDMGEXP
-
 # Calculate total economic damage (property + crop)
 storm$DMG_full <- storm$PROPDMGEXP + storm$CROPDMGEXP
 
@@ -217,8 +231,6 @@ avg_damage <- econ %>%
 		  summarise(mean_economic_damage = mean(DMG_full, na.rm = T)) %>%
 		  arrange(desc(mean_economic_damage))
 ```
-
-## Which events cause the most economic damage
 
 We can see which events cause the most damage *in total* and *on average* below.
 
@@ -248,3 +260,5 @@ barplot(avg_damage$mean_economic_damage[1:10],
 	  main = "Average Economic Damage by Event Type"
 	  )
 ```
+*Caption:*
+The plot above shows the top ten events for total economic damage and average economic damage per event.
