@@ -38,7 +38,9 @@ storm <- as.tbl(storm)
 
 ### Preliminary analysis
 
-There are two variables in the dataset that relate to health impacts INJURIES and FATALITIES. Before doing the full data analysis, it is useful to do have a basic look at the distribution of the data, calculate some simple summary statistics, and check for missing data.
+There are two variables in the dataset that relate to health impacts INJURIES and FATALITIES. There is no advice on how to weight deaths versus injuries, so I will treat them separately here.
+
+Before doing the full data analysis, it is useful to do have a basic look at the distribution of the data, calculate some simple summary statistics, and check for missing data.
 
 ```{r}
 # Check for missing data
@@ -114,58 +116,51 @@ Here again, we see that tornadoes top the list, accounting for `r sum(storm$INJU
 
 ```{r}
 # Calculate mean deaths for each event type
-avg_injury <- storm_health %>%
-				   summarise(mean_injury = mean(INJURIES)) %>% 
-				   arrange(desc(mean_injury))
+avg_injuries <- storm_health %>%
+				   summarise(mean_injuries = mean(INJURIES)) %>% 
+				   arrange(desc(mean_injuries))
 
-head(avg_injury, n = 10)
+head(avg_injuries, n = 10)
 ```
 
 In terms of average numbers of injury, wild fires cause more than twice as many injuries on average than the next on the list. Hot weather events also cause a large number of injuries on average in the top ten. 
 
-### A combined measure
+```{r, fig.width = 12, fig.height = 12}
+par(mfrow = c(2,2), mar = c(10, 5, 4, 1), las = 2)
 
-There is no specific guidance for this project on how to define harm to population health. In the absence of guidance on how to weight deaths versus injuries, I will use a combined measure for each event type that is simply the total number of deaths and injuries caused. 
-
-```{r}
-# Create TOTAL_HARM variable
-storm_health$TOTAL_HARM <- storm_health$INJURIES + storm_health$FATALITIES
-
-# Calculate sum and mean of TOTAL_HARM for each event type
-avg_harm <- storm_health %>%
-				 summarise(mean_harm = mean(TOTAL_HARM)) %>% 
-				 arrange(desc(mean_harm))
-
-head(avg_harm, n = 10)
-
-total_harm <- storm_health %>%
-				   summarise(total_harm = sum(TOTAL_HARM)) %>% 
-				   arrange(desc(total_harm))
-
-head(total_harm, n = 10)
-```
-
-From this we can see that wild fires cause the most harm on average, and tornados cause the most harm in total. Finally, I construct plots of total and average harm for the top ten events in each category.
-
-```{r, fig.width=12}
-par(mfrow = c(1,2), mar = c(10, 5, 4, 1), las = 2)
-
-barplot(total_harm$total_harm[1:10],
-	  ylab = "Fatalities & Injuries",
-	  names.arg = total_harm$EVTYPE[1:10],
+barplot(total_deaths$deaths[1:10],
+	  ylab = "Total Fatalities",
+	  names.arg = total_deaths$EVTYPE[1:10],
 	  cex.names = 0.6,
-	  cex.axis = 0.7,
-	  main = "Total harm by event type"
+	  cex.axis = 0.6,
+	  main = "Total Fatalities by Event Type"
 	  )
 
-barplot(avg_harm$mean_harm[1:10], 
-	  ylab = "Fatalities & Injuries",
-	  names.arg = avg_harm$EVTYPE[1:10], 
+barplot(avg_deaths$mean_deaths[1:10], 
+	  ylab = "Mean Fatalities per Event",
+	  names.arg = avg_deaths$EVTYPE[1:10], 
 	  cex.names = 0.6,
-	  cex.axis = 0.7,
-	  main = "Mean harm by event type"
+	  cex.axis = 0.6,
+	  main = "Average Fatalities by Event Type"
+	  )
+
+barplot(total_injuries$injuries[1:10], 
+	  ylab = "Total Injuries per Event",
+	  names.arg = total_injuries$EVTYPE[1:10], 
+	  cex.names = 0.6,
+	  cex.axis = 0.6,
+	  main = "Total Injuries by Event Type"
+	  )
+
+barplot(avg_injuries$mean_injuries[1:10], 
+	  ylab = "Mean Injuries per Event",
+	  names.arg = avg_injuries$EVTYPE[1:10], 
+	  cex.names = 0.6,
+	  cex.axis = 0.6,
+	  main = "Average Injuries by Event Type"
 	  )
 ```
+
 
 ## Which event types have the biggest economic impacts?
 
