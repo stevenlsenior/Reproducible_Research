@@ -1,0 +1,255 @@
+---
+title: "RepData_PeerAssessment2"
+author: "Steve Senior"
+date: "13 November 2014"
+output: html_document
+---
+Health and Economic Impacts of Weather Events
+==========================
+# Synopsis
+
+# Data Processing
+
+## Installing Packages
+
+```{r Install packages}
+# install.packages(c("R.utils", "dplyr"))
+library(R.utils)
+library(dplyr)
+```
+
+## Loading and preprocessing the data
+```{r Load data, cache = TRUE}
+# Download if not already present
+if(!file.exists("repdata-data-StormData.csv")){
+	file_url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+	download.file(file_url, "repdata-data-StormData.csv.bz2", method = "curl")
+	bunzip2("repdata-data-StormData.csv.bz2")
+} 
+
+# Load the data
+storm <- read.csv("repdata-data-StormData.csv", header = T, stringsAsFactors = T)
+storm <- as.tbl(storm)
+```
+
+# Results
+
+## Which event types are most harmful to population health?
+
+### Preliminary analysis
+
+There are two variables in the dataset that relate to health impacts INJURIES and FATALITIES. Before doing the full data analysis, it is useful to do have a basic look at the distribution of the data, calculate some simple summary statistics, and check for missing data.
+
+```{r}
+# Check for missing data
+na_death <- sum(is.na(storm$FATALITIES))
+na_injury <- sum(is.na(storm$INJURIES))
+```
+
+There are no missing data in the injuries or fatalities. However, it is worth noting that there are `r length(levels(storm$EVTYPE))` different levels to the EVTYPE variable. This raises some doubts about how the events were classified. A quick inspection reveals that there are multiple misspellings and often the same description in upper and lower case. A full clean-up of the data is beyond the scope of this assignment, but the capitalisation one is easy to fix:
+
+```{r}
+# Fix capitalisation
+storm$EVTYPE <- as.factor(toupper(as.character(storm$EVTYPE)))
+```
+
+```{r}
+total_death <- sum(storm$FATALITIES)
+total_injury <- sum(storm$INJURIES)
+perc_death <- sum(storm$FATALITIES > 0) * 100 / length(storm$FATALITIES)
+perc_injury <- sum(storm$INJURIES > 0) * 100 / length(storm$INJURIES)
+summary(storm$INJURIES)
+summary(storm$FATALITIES)
+```
+
+The analysis above shows that the data is highly left-skewed. In particular, the vast majority of events cause neither death nor injury. Only `r perc_injury`% of events resulted in injury and `r perc_death`% resulted in a death. However the distribution has a long tail, as can be seen from the summaries. One event caused `r max(storm$INJURIES)` injuries, and another caused `r max(storm$FATALITIES)` deaths. Because of this, I will work with only those events where there was at least one injury or death. 
+
+```{r}
+# Filter out events with neither injuries nor fatalities, group by event type
+storm_health <- filter(storm, INJURIES > 0 | FATALITIES > 0) %>% group_by(EVTYPE)
+```
+
+I now look at fatalities and injuries separately.
+
+### Which event types cause the most deaths?
+
+There are two questions that we could ask: which types of event accounted for the greatest number of *total* deaths? and which types of event caused the greates number of deaths *on average*? These aren't necessarily the same: if one type of event happens often, but causes few fatalities, and another happens rarely, but causes many, the first could cause more total deaths, but the second could cause more on average. This is relevant because it will be important to be prepared for both kinds of event.
+
+```{r}
+# Find which individual events caused most deaths
+total_deaths <- storm_health %>%
+				     summarise(deaths = sum(FATALITIES)) %>% 
+				     arrange(desc(deaths))
+
+head(total_deaths, n = 10)
+```
+
+From this we can see that tornados account for by far the most deaths. They account for `r sum(storm$FATALITIES[storm$EVTYPE == "TORNADO"])` out of a total of `r sum(storm$FATALITIES)` deaths, or `r signif(sum(storm$FATALITIES[storm$EVTYPE == "TORNADO"]) *100 / sum(storm$FATALITIES), digits = 4)`%. Excessive heat is another major cause of death, accounting for `r sum(storm$FATALITIES[storm$EVTYPE == "EXCESSIVE HEAT"])` deaths, or around `r signif(sum(storm$FATALITIES[storm$EVTYPE == "EXCESSIVE HEAT"]) *100 / sum(storm$FATALITIES), digits = 4)`% of the total.
+
+```{r}
+# Calculate mean deaths for each event type
+avg_deaths <- storm_health %>%
+				   summarise(mean_deaths = mean(FATALITIES)) %>% 
+				   arrange(desc(mean_deaths))
+
+head(avg_deaths, n = 10)
+```
+
+This shows that 'unseasonably warm and dry' weather events cause the most deaths on average. Tornados also cause a high average number of deaths per event. Notably, a further three of the top ten events for fatalities are forms of hot weather. This confirms the concerns raised above about the coding of the weather events: are the factor levels meaningfully different?
+
+### Which event types cause the most injuries?
+
+As with the numbers of deaths, I also look at the types of event that account for the greatest number of injuries *in total* and the types of event that cause the most injuries *on average*.
+
+```{r}
+# Calculate total injuries for each event type
+total_injuries <- storm_health %>%
+				       summarise(injuries = sum(INJURIES)) %>% 
+				       arrange(desc(injuries))
+
+head(total_injuries, n = 10)
+```
+
+Here again, we see that tornadoes top the list, accounting for `r sum(storm$INJURIES[storm$EVTYPE == "TORNADO"])` out of a total of `r sum(storm$INJURIES)` injuries, or `r signif(sum(storm$INJURIES[storm$EVTYPE == "TORNADO"]) *100 / sum(storm$INJURIES), digits = 4)`%. Excessive heat features again, along with 'tstm wind', flood and lightning, all of which account for over 5,000 injuries.
+
+```{r}
+# Calculate mean deaths for each event type
+avg_injury <- storm_health %>%
+				   summarise(mean_injury = mean(INJURIES)) %>% 
+				   arrange(desc(mean_injury))
+
+head(avg_injury, n = 10)
+```
+
+In terms of average numbers of injury, wild fires cause more than twice as many injuries on average than the next on the list. Hot weather events also cause a large number of injuries on average in the top ten. 
+
+### A combined measure
+
+There is no specific guidance for this project on how to define harm to population health. In the absence of guidance on how to weight deaths versus injuries, I will use a combined measure for each event type that is simply the total number of deaths and injuries caused. 
+
+```{r}
+# Create TOTAL_HARM variable
+storm_health$TOTAL_HARM <- storm_health$INJURIES + storm_health$FATALITIES
+
+# Calculate sum and mean of TOTAL_HARM for each event type
+avg_harm <- storm_health %>%
+				 summarise(mean_harm = mean(TOTAL_HARM)) %>% 
+				 arrange(desc(mean_harm))
+
+head(avg_harm, n = 10)
+
+total_harm <- storm_health %>%
+				   summarise(total_harm = sum(TOTAL_HARM)) %>% 
+				   arrange(desc(total_harm))
+
+head(total_harm, n = 10)
+```
+
+From this we can see that wild fires cause the most harm on average, and tornados cause the most harm in total. Finally, I construct plots of total and average harm for the top ten events in each category.
+
+```{r, fig.width=12}
+par(mfrow = c(1,2), mar = c(10, 5, 4, 1), las = 2)
+
+barplot(total_harm$total_harm[1:10],
+	  ylab = "Fatalities & Injuries",
+	  names.arg = total_harm$EVTYPE[1:10],
+	  cex.names = 0.6,
+	  cex.axis = 0.7,
+	  main = "Total harm by event type"
+	  )
+
+barplot(avg_harm$mean_harm[1:10], 
+	  ylab = "Fatalities & Injuries",
+	  names.arg = avg_harm$EVTYPE[1:10], 
+	  cex.names = 0.6,
+	  cex.axis = 0.7,
+	  main = "Mean harm by event type"
+	  )
+```
+
+## Which event types have the biggest economic impacts?
+
+### Preliminary analysis
+
+There are four variables that relaate to economic damage in the data set, two refer to property damage and two refer to crop damage. In both cases, one variable gives a value, and the second variable gives the exponent (in powers of 10) for that value. A quick glance at the data reveals that the exponent variable data is very messy:
+
+```{r}
+summary(storm$PROPDMGEXP)
+summary(storm$CROPDMGEXP)
+```
+
+The levels of these variables are all over the place. According to the documentation for the data set: *"Estimates should be rounded to three significant digits, followed by an alphabetical character signifying the magnitude of the number, i.e., 1.55B for $1,550,000,000. Alphabetical characters used to signify magnitude include “K” for thousands, “M” for millions, and “B” for billions."* On this basis, I correct character cases, then convert any value that is not "", K", "M", "B" to NA (I assume that "" means that the value of the exponent it 0). Then I create two new variables that have the actual property and crop damage values (to three signficant figures). Finally, I sum these two variables to get total economic damage. Note that where an event has NA for either property or crop damage, the total will also be NA. I thought this more appropriate than, for example assuming NA meant zero, or using any other method of imputing missing values.
+
+```{r}
+# Convert all values to upper case
+storm$PROPDMGEXP <- toupper(storm$PROPDMGEXP)
+storm$CROPDMGEXP <- toupper(storm$CROPDMGEXP)
+
+# Replace values not equal to "K", "M" or "B" with NA
+valid <- c("", "K", "M", "B")
+storm$PROPDMGEXP[!(storm$PROPDMGEXP %in% valid)]  <- NA
+storm$CROPDMGEXP[!(storm$CROPDMGEXP %in% valid)]  <- NA
+
+# Convert to character
+storm$PROPDMGEXP <- as.character(storm$PROPDMGEXP)
+storm$CROPDMGEXP <- as.character(storm$CROPDMGEXP)
+
+# Replace alphabetical character with numeric powers of 10
+for(k in 1:length(valid)){
+	storm$PROPDMGEXP[storm$PROPDMGEXP == valid[k]] <- 10^(3*(k-1))
+	storm$CROPDMGEXP[storm$CROPDMGEXP == valid[k]] <- 10^(3*(k-1))
+}
+
+# Convert to numeric
+storm$PROPDMGEXP <- as.numeric(storm$PROPDMGEXP)
+storm$CROPDMGEXP <- as.numeric(storm$CROPDMGEXP)
+
+# Create new variables with all property and crop damage
+storm$PROPDMG_full <- storm$PROPDMG * storm$CROPDMGEXP
+storm$CROPDMG_full <- storm$CROPDMG * storm$CROPDMGEXP
+
+# Calculate total economic damage (property + crop)
+storm$DMG_full <- storm$PROPDMGEXP + storm$CROPDMGEXP
+
+# Group by event type and calculate total and mean economic damage
+econ <- group_by(storm, EVTYPE)
+
+total_damage <- econ %>% 
+		    summarise(total_economic_damage = sum(DMG_full, na.rm = T)) %>%
+		    arrange(desc(total_economic_damage))
+
+avg_damage <- econ %>%
+		  summarise(mean_economic_damage = mean(DMG_full, na.rm = T)) %>%
+		  arrange(desc(mean_economic_damage))
+```
+
+## Which events cause the most economic damage
+
+We can see which events cause the most damage *in total* and *on average* below.
+
+```{r}
+head(avg_damage, n = 10)
+head(total_damage, n = 10)
+```
+
+From this we can see that tornados cause the most damage in total, and joint first most economic damage on average per event. Hurricane Opal also causes a lot of economic damage, indicating a rare event with a large impact. 
+
+```{r, fig.width = 12}
+par(mfrow = c(1,2), mar = c(10, 5, 4, 1), las = 2)
+
+barplot(total_damage$total_economic_damage[1:10],
+	  ylab = "Total Economic Damage ($)",
+	  names.arg = total_damage$EVTYPE[1:10],
+	  cex.names = 0.6,
+	  cex.axis = 0.6,
+	  main = "Total Economic Damage by Event Type"
+	  )
+
+barplot(avg_damage$mean_economic_damage[1:10], 
+	  ylab = "Mean Economic Damage ($)",
+	  names.arg = avg_damage$EVTYPE[1:10], 
+	  cex.names = 0.6,
+	  cex.axis = 0.6,
+	  main = "Average Economic Damage by Event Type"
+	  )
+```
